@@ -18,7 +18,7 @@ app = dash.Dash(__name__,
 #collect data
 df = get_prices()
 prices, current = get_ticker(df)
-cycles = get_cycles(df)
+cycles = get_cycles()
 
 dom=get_dom()
 
@@ -124,7 +124,7 @@ app.layout = dbc.Container([
                                   }
                            )
             ]),
-            dcc.Dropdown(id='my-dpdn', multi=True, value=[3, 4],
+            dcc.Dropdown(id='my-dpdn', multi=True, value=['3', '4'],
                          options=[{'label': x, 'value': x,}
                                   for x in sorted(cycles['cycle'].unique())],
                          style={'backgroundColor':'rgba(0,0,0,0)',

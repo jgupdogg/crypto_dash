@@ -72,20 +72,48 @@ def get_dom():
     dom = pd.concat([dom, others], ignore_index=True)
     return dom
 
-def get_cycles(df):
-    cycles = pd.read_csv('btc_cycles').iloc[:, 1:]
-    cycles = cycles[cycles['cycle'] < 4]
+def get_cycles():
+    #import historic data
+    BTC = pd.read_csv('historic_btc')
+
+    # request new data and rename to match historic data
     data = yf.Ticker("{}-USD".format('BTC'))
     df = data.history(period="max").reset_index(drop=False)
+    df = df[['Open', 'Date']].rename(columns={'Open': 'price', 'Date': 'time'})
 
+    # isolate cycle 4 time series and concat with historic
     day1 = dt.datetime(2020, 5, 11)
-    new = df[df['Date'] >= day1]
-    initial_price = new['Open'].iloc[0]
-    num_days = len(new)
-    new['cycle'] = 4
-    new['days_since_halving'] = np.linspace(0, num_days, num=num_days).astype(int)
-    new['por_increase'] = new['Open'] / initial_price
+    new = df[df['time'] >= day1]
+    BTC = pd.concat([BTC, new]).reset_index(drop=True)
+    BTC['time'] = pd.to_datetime(BTC['time'])
 
-    new = new[cycles.columns]
-    cycles = pd.concat([cycles, new]).reset_index(drop=True)
-    return cycles
+    # enter halvings dates
+    halvings = pd.Series(['2009-1-3', '2012-11-28', '2016-7-9', '2020-5-11', BTC['time'].iloc[-1]])
+    halvings = pd.to_datetime(halvings)
+
+    # Create days since halving and cycle feature columns
+    days = pd.Series()
+    cycles = pd.Series()
+    for i in range(len(halvings) - 1):
+        start = halvings[i]
+        end = halvings[i + 1]
+        mask = (BTC['time'] >= start) & (BTC['time'] <= end)
+        days_since = BTC[mask]['time'].apply(lambda x: (x - start))
+        days = pd.concat([days, days_since], ignore_index=True)
+        cycle = BTC[mask]['time'].apply(lambda x: i + 1)
+        cycles = pd.concat([cycles, cycle], ignore_index=True)
+    BTC['days_since_halving'] = days.astype(str)
+    BTC['days_since_halving'] = BTC['days_since_halving'].str.replace('days', '').astype(int)
+    BTC['cycle'] = cycles.astype(str)
+    cycles = {}
+    for cycle in BTC['cycle'].unique():
+        data = BTC[BTC['cycle'] == cycle].copy()
+        bottom = data['price'].iloc[0]
+        data['por_increase'] = BTC['price'].apply(lambda x: x / bottom)
+        data['por_increase'] = data['por_increase']
+        if cycle == '1':
+            results = data
+        else:
+            results = pd.concat([results, data])
+    return results.iloc[:, 1:]
+
