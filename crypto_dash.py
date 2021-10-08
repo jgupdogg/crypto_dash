@@ -5,25 +5,27 @@ from dash.dependencies import Output, Input
 import plotly.express as px
 import dash_bootstrap_components as dbc
 import pandas as pd
-import pandas_datareader.data as web
 import time
+import dash_table
+from get_data import get_dom, get_prices, get_cycles, get_ticker
 
-
-# https://stooq.com/
-
-df = pd.read_csv('crypto_prices')
-cycles = pd.read_csv('btc_cycles')
-dom=pd.read_csv('market_dom')
-
-# https://www.bootstrapcdn.com/bootswatch/
+#initiate app
 app = dash.Dash(__name__,
                 meta_tags=[{'name': 'viewport',
                             'content': 'width=device-width, initial-scale=1.0'}]
                 )
 
+#collect data
+df = get_prices()
+prices, current = get_ticker(df)
+cycles = get_cycles(df)
+
+dom=get_dom()
+
+#set colors
 colors = {
     'background': '#120221',
-    'text': '#f1b633'
+    'text': '#1ba2f6'
 }
 color_map={'BTC':'darkorange',
             'ETH':'blue',
@@ -38,6 +40,7 @@ color_map={'BTC':'darkorange',
             'Other':'red',
             'matic':'purple'}
 
+#define plot layout
 layout = dict(plot_bgcolor = colors['background'],
              paper_bgcolor = 'rgba(0,0,0,0)',
              font = {'color' : colors['text']},
@@ -57,10 +60,32 @@ layout = dict(plot_bgcolor = colors['background'],
 app.layout = dbc.Container([
 
     dbc.Row(
-        dbc.Col(html.H1("Crypto  Dash Live ",
-                        style = {'color':'#f1b633', 'text-align':'center', 'padding':25}
+        dbc.Col(html.H1("CryptoDash.Live ",
+                        style = {'color': '#1ba2f6', 'text-align':'center', 'padding':25}
                         )
                 )
+    ),
+    dbc.Row(
+        dash_table.DataTable(
+            id='mydatatable',
+            columns=[{"name": i, "id": i} for i in prices.columns],
+            data=prices.to_dict('records'),
+            style_header={'backgroundColor': 'black', 'color':'#1ba2f6', 'text-align':'center'},
+            style_data={'text-align':'center', 'backgroundColor':'black'},
+            style_data_conditional=(
+                [
+                    {
+                        'if': {
+                            'column_id': '{}'.format(i),
+                        },
+                        'backgroundColor':'{}'.format(x),
+                        'color':'black',
+                        'fontWeight':'bold'
+                    }
+                    for i, x in zip(current['Symbols'], current['color'])
+                ]
+            )
+        )
     ),
     dbc.Row(
         dbc.Col([
@@ -245,7 +270,7 @@ app.layout = dbc.Container([
 
 # Callback section: connecting the components
 # ************************************************************************
-# Line chart - Single
+# Pie chart
 @app.callback(
     Output('pie-fig', 'figure'),
     Input('my-dpdn3', 'value')
@@ -261,6 +286,7 @@ def update_graph(date):
                       marker=dict(line=dict(color='#000000', width=2)))
     return figpie
 
+#Line chart - Multiple
 @app.callback(
     Output('line-fig', 'figure'),
     [Input('my-dpdn', 'value'),
@@ -290,7 +316,7 @@ def update_graph(cycle_slctd, date_range):
 )
 def update_graph(stock_slctd, date_range):
     dff = df[df['Symbols'].isin(stock_slctd)]
-    dff = dff[(dff['unix'] >= date_range[0]) & (dff['unix'] <= date_range[1])]
+    dff = dff[(dff['unix'] >= date_range[0]) & (dff['unix'] <= date_range[1])].reset_index(drop=False)
     for coin in stock_slctd:
         data = dff[dff['Symbols'] == coin].sort_values('Date')
         initial = data['Open'].iloc[0]
@@ -299,7 +325,6 @@ def update_graph(stock_slctd, date_range):
             response = data
         else:
             response = pd.concat([response, data])
-
     figln2 = px.line(response, x='Date', y='pct_chng', color='Symbols',color_discrete_map=color_map
                      )
     figln2.update_layout(layout)
@@ -330,9 +355,6 @@ def update_graph(stock_slctd, date_range):
 
     return figbar
 
-
-
 if __name__ == '__main__':
     app.run_server(debug=True, port=8000)
 
-# https://youtu.be/0mfIK8zxUds
